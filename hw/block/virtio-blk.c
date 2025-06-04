@@ -1814,6 +1814,7 @@ static void virtio_blk_device_realize(DeviceState *dev, Error **errp)
                          conf->conf.lcyls,
                          conf->conf.lheads,
                          conf->conf.lsecs);
+
 }
 
 static void virtio_blk_device_unrealize(DeviceState *dev)

@@ -17,6 +17,7 @@
 #include "hw/pci/pcie_doe.h"
 #include "hw/pci/msi.h"
 #include "hw/pci/msix.h"
+#include "system/spdm.h"
 
 #define DWORD_BYTE 4
 
@@ -104,6 +105,8 @@ void pcie_doe_init(PCIDevice *dev, DOECap *doe_cap, uint16_t offset,
 
     doe_cap->write_mbox = g_malloc0(PCI_DOE_DW_SIZE_MAX * DWORD_BYTE);
     doe_cap->read_mbox = g_malloc0(PCI_DOE_DW_SIZE_MAX * DWORD_BYTE);
+
+    doe_cap->new_package = 1;
 
     pcie_doe_reset_mbox(doe_cap);
 
@@ -211,12 +214,12 @@ static void pcie_doe_prepare_rsp(DOECap *doe_cap)
         return;
     }
 
-    if (doe_cap->write_mbox[0] ==
+    if (doe_cap->write_mbox[doe_cap->write_mbox_hd1] ==
         DATA_OBJ_BUILD_HEADER1(PCI_VENDOR_ID_PCI_SIG, PCI_SIG_DOE_DISCOVERY)) {
         handle_request = pcie_doe_discovery;
     } else {
         for (p = 0; p < doe_cap->protocol_num - 1; p++) {
-            if (doe_cap->write_mbox[0] ==
+            if (doe_cap->write_mbox[doe_cap->write_mbox_hd1] ==
                 pcie_doe_build_protocol(&doe_cap->protocols[p])) {
                 handle_request = doe_cap->protocols[p].handle_request;
                 break;
@@ -230,7 +233,7 @@ static void pcie_doe_prepare_rsp(DOECap *doe_cap)
      * indicated Length for a data object, then the
      * data object must be silently discarded.
      */
-    if (handle_request && (doe_cap->write_mbox_len ==
+    if (handle_request && (doe_cap->write_mbox[doe_cap->write_mbox_hd1 + 1] ==
         pcie_doe_get_obj_len(pcie_doe_get_write_mbox_ptr(doe_cap)))) {
         success = handle_request(doe_cap);
     }
@@ -323,6 +326,9 @@ void pcie_doe_write_config(DOECap *doe_cap,
 
         if (FIELD_EX32(val, PCI_DOE_CAP_CONTROL, DOE_GO)) {
             pcie_doe_prepare_rsp(doe_cap);
+
+            /* Next write to the mailbox will be a new package */
+            doe_cap->new_package = 1;
         }
 
         if (FIELD_EX32(val, PCI_DOE_CAP_CONTROL, DOE_INTR_EN)) {
@@ -355,6 +361,12 @@ void pcie_doe_write_config(DOECap *doe_cap,
         /* Mailbox should be DW accessed */
         if (size != DWORD_BYTE) {
             return;
+        }
+
+        /* If is a new package, update the header indicator */
+        if (doe_cap->new_package) {
+            doe_cap->write_mbox_hd1 = doe_cap->write_mbox_len;
+            doe_cap->new_package = 0;
         }
         doe_cap->write_mbox[doe_cap->write_mbox_len] = val;
         doe_cap->write_mbox_len++;

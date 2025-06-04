@@ -64,6 +64,10 @@ meson_options_help() {
   printf "%s\n" '                           cpu name [/usr/gnemul/qemu-%M]'
   printf "%s\n" '  --libdir=VALUE           Library directory [system default]'
   printf "%s\n" '  --libexecdir=VALUE       Library executable directory [libexec]'
+  printf "%s\n" '  --libspdm-crypto=CHOICE  Set LibSPDM crypto algorithm [mbedtls] (choices:'
+  printf "%s\n" '                           mbedtls/openssl)'
+  printf "%s\n" '  --libspdm-toolchain=VALUE'
+  printf "%s\n" '                           Toolchain to use for LibSPDM compilation [GCC]'
   printf "%s\n" '  --localedir=VALUE        Locale data directory [share/locale]'
   printf "%s\n" '  --localstatedir=VALUE    Localstate data directory [/var/local]'
   printf "%s\n" '  --mandir=VALUE           Manual page directory [share/man]'
@@ -80,7 +84,7 @@ meson_options_help() {
   printf "%s\n" '  --tls-priority=VALUE     Default TLS protocol/cipher priority string'
   printf "%s\n" '                           [NORMAL]'
   printf "%s\n" '  --with-coroutine=CHOICE  coroutine backend to use (choices:'
-  printf "%s\n" '                           auto/sigaltstack/ucontext/windows/wasm)'
+  printf "%s\n" '                           auto/sigaltstack/ucontext/wasm/windows)'
   printf "%s\n" '  --with-pkgversion=VALUE  use specified string as sub-version of the'
   printf "%s\n" '                           package'
   printf "%s\n" '  --with-suffix=VALUE      Suffix for QEMU data/modules/config directories'
@@ -141,6 +145,7 @@ meson_options_help() {
   printf "%s\n" '  libkeyutils     Linux keyutils support'
   printf "%s\n" '  libnfs          libnfs block device driver'
   printf "%s\n" '  libpmem         libpmem support'
+  printf "%s\n" '  libspdm         LibSPDM support'
   printf "%s\n" '  libssh          ssh block device support'
   printf "%s\n" '  libudev         Use libudev to enumerate host devices'
   printf "%s\n" '  libusb          libusb support for USB passthrough'
@@ -374,6 +379,10 @@ _meson_option_parse() {
     --disable-libnfs) printf "%s" -Dlibnfs=disabled ;;
     --enable-libpmem) printf "%s" -Dlibpmem=enabled ;;
     --disable-libpmem) printf "%s" -Dlibpmem=disabled ;;
+    --enable-libspdm) printf "%s" -Dlibspdm=enabled ;;
+    --disable-libspdm) printf "%s" -Dlibspdm=disabled ;;
+    --libspdm-crypto=*) quote_sh "-Dlibspdm-crypto=$2" ;;
+    --libspdm-toolchain=*) quote_sh "-Dlibspdm-toolchain=$2" ;;
     --enable-libssh) printf "%s" -Dlibssh=enabled ;;
     --disable-libssh) printf "%s" -Dlibssh=disabled ;;
     --enable-libudev) printf "%s" -Dlibudev=enabled ;;

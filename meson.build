@@ -23,6 +23,7 @@ keyval = import('keyval')
 rust = import('rust')
 ss = import('sourceset')
 fs = import('fs')
+cmake = import('cmake')
 
 host_os = host_machine.system()
 config_host = keyval.load(meson.current_build_dir() / 'config-host.mak')
@@ -225,6 +226,10 @@ have_tpm = get_option('tpm') \
   .require(host_os != 'windows', error_message: 'TPM emulation only available on POSIX systems') \
   .allowed()
 
+have_libspdm = get_option('libspdm') \
+  .require(host_os == 'linux', error_message: 'LibSPDM is supported only on Linux') \
+  .allowed()
+
 # vhost
 have_vhost_user = get_option('vhost_user') \
   .disable_auto_if(host_os != 'linux') \
@@ -334,6 +339,71 @@ elif cpu == 'x86_64'
     'CONFIG_NVMM': ['i386-softmmu', 'x86_64-softmmu'],
     'CONFIG_WHPX': ['i386-softmmu', 'x86_64-softmmu'],
   }
+endif
+
+modular_tcg = []
+# Darwin does not support references to thread-local variables in modules
+if host_os != 'darwin'
+  modular_tcg = ['i386-softmmu', 'x86_64-softmmu']
+endif
+
+libspdm_dep_targets = [
+  'debuglib',
+  'malloclib',
+  'memlib',
+  'platform_lib',
+  'rnglib',
+  'spdm_cert_verify_callback_sample',
+  'spdm_common_lib',
+  'spdm_crypt_ext_lib',
+  'spdm_crypt_lib',
+  'spdm_device_secret_lib_sample',
+  'spdm_requester_lib',
+  'spdm_responder_lib',
+  'spdm_secured_message_lib',
+  'spdm_transport_mctp_lib',
+  'spdm_transport_pcidoe_lib',
+  ]
+
+if cpu not in supported_cpus
+  libspdm_host_arch = 'unknown'
+  message(f'LibSPDM will not compile with CMake defines: -DARCH=@libspdm_host_arch@')
+elif cpu == 'x86_64'
+  libspdm_host_arch = 'x64'
+elif cpu == 'x86'
+  libspdm_host_arch = 'ia32'
+elif cpu == 'arm'
+  libspdm_host_arch = 'arm'
+elif cpu == 'aarch64'
+  libspdm_host_arch = 'aarch64'
+else
+  libspdm_host_arch = cpu
+endif
+
+if get_option('debug')
+  libspdm_target = 'Debug'
+else 
+  libspdm_target = 'Release'
+endif
+
+if get_option('libspdm-crypto') == 'openssl'
+  libspdm_dep_targets += [
+    'cryptlib_openssl',
+    'openssllib',
+  ]
+elif get_option('libspdm-crypto') == 'mbedtls'
+  libspdm_dep_targets += [
+    'cryptlib_mbedtls',
+    'mbedcrypto',
+    'mbedtls',
+    'mbedx509',
+  ]
+endif
+
+if get_option('b_coverage')
+  libspdm_gcov = 'ON'
+else 
+  libspdm_gcov = 'OFF'
 endif
 
 ##################
@@ -1953,7 +2023,7 @@ endif
 
 
 gtk = not_found
-gtkx11 = not_found
+g11 = not_found
 vte = not_found
 have_gtk_clipboard = get_option('gtk_clipboard').enabled()
 
@@ -2540,6 +2610,7 @@ if have_tcg
   config_host_data.set('CONFIG_TCG', 1)
   config_host_data.set('CONFIG_TCG_INTERPRETER', tcg_arch == 'tci')
 endif
+config_host_data.set('CONFIG_LIBSPDM', have_libspdm)
 config_host_data.set('CONFIG_TPM', have_tpm)
 config_host_data.set('CONFIG_TSAN', get_option('tsan'))
 config_host_data.set('CONFIG_USB_LIBUSB', libusb.found())
@@ -3315,7 +3386,9 @@ host_kconfig = \
   (multiprocess_allowed ? ['CONFIG_MULTIPROCESS_ALLOWED=y'] : []) + \
   (vfio_user_server_allowed ? ['CONFIG_VFIO_USER_SERVER_ALLOWED=y'] : []) + \
   (hv_balloon ? ['CONFIG_HV_BALLOON_POSSIBLE=y'] : []) + \
-  (have_rust ? ['CONFIG_HAVE_RUST=y'] : [])
+  (have_rust ? ['CONFIG_HAVE_RUST=y'] : []) + \
+  (have_libspdm ? ['CONFIG_LIBSPDM=y'] : []) + \
+  (hv_balloon ? ['CONFIG_HV_BALLOON_POSSIBLE=y'] : [])
 
 ignored = [ 'TARGET_XML_FILES', 'TARGET_ABI_DIR', 'TARGET_ARCH' ]
 
@@ -3508,6 +3581,23 @@ libvduse = not_found
 if have_libvduse
   libvduse_proj = subproject('libvduse')
   libvduse = libvduse_proj.get_variable('libvduse_dep')
+endif
+
+spdm = []
+if have_libspdm
+  libspdm_opt = cmake.subproject_options()
+  libspdm_opt.add_cmake_defines({'ARCH': libspdm_host_arch, \
+                                 'TOOLCHAIN': get_option('libspdm-toolchain'), \
+                                 'TARGET': libspdm_target, \
+                                 'CRYPTO': get_option('libspdm-crypto'), \
+                                 'DISABLE_TESTS': 1, \
+                                 'GCOV': libspdm_gcov, \
+                                 'BUILD_LINUX_SHARED_LIB': 'ON'})
+  libspdm_proj = cmake.subproject('libspdm', options: libspdm_opt)
+
+  foreach dep : libspdm_dep_targets
+    spdm += libspdm_proj.dependency(dep)
+  endforeach
 endif
 
 #####################
@@ -4103,7 +4193,7 @@ common_ss.add(hwcore)
 # Targets #
 ###########
 
-system_ss.add(authz, blockdev, chardev, crypto, io, qmp)
+system_ss.add(authz, blockdev, chardev, crypto, io, qmp, spdm)
 common_ss.add(qom, qemuutil)
 
 libuser = static_library('user',
@@ -4900,6 +4990,7 @@ summary_info += {'AF_ALG support':    have_afalg}
 summary_info += {'rng-none':          get_option('rng_none')}
 summary_info += {'Linux keyring':     have_keyring}
 summary_info += {'Linux keyutils':    keyutils}
+summary_info += {'LibSPDM algorithm': get_option('libspdm-crypto')}
 summary(summary_info, bool_yn: true, section: 'Crypto')
 
 # UI

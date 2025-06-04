@@ -382,3 +382,10 @@ option('rust', type: 'feature', value: 'disabled',
        description: 'Rust support')
 option('strict_rust_lints', type: 'boolean', value: false,
        description: 'Enable stricter set of Rust warnings')
+option('libspdm', type: 'feature', value: 'disabled',
+       description: 'LibSPDM support')
+option('libspdm-crypto', type: 'combo', value: 'mbedtls',
+       choices: ['mbedtls', 'openssl'],
+       description: 'Set LibSPDM crypto algorithm')
+option('libspdm-toolchain', type: 'string', value: 'GCC',
+       description: 'Toolchain to use for LibSPDM compilation')
