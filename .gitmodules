@@ -45,4 +45,4 @@
 	url = https://gitlab.com/libvirt/libvirt-ci.git
 [submodule "subprojects/libspdm"]
 	path = subprojects/libspdm
-	url = https://github.com/dmtf/spdm.git
+	url = https://github.com/dmtf/libspdm.git
